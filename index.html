@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Vocabulary Tracker</title>
+
+<style>
+  :root{
+    --ink:#1f2a24;
+    --paper:#faf7f0;
+    --line:#d9d2c2;
+    --accent:#c9622f;
+    --pending:#8a8170;
+    --pending-bg:#eee9dd;
+    --active:#3563a8;
+    --active-bg:#e3eaf6;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:var(--paper);
+    color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    -webkit-tap-highlight-color:transparent;
+  }
+  .app{max-width:100%;margin:0 auto;min-height:100vh;padding-bottom:24px;}
+  header{padding:16px;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--paper);z-index:10;}
+  .eyebrow{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--accent);font-weight:700;margin-bottom:4px;}
+  h1{font-size:20px;margin:0 0 10px;font-weight:800;letter-spacing:-0.01em;}
+
+  button{border:none;cursor:pointer;font-family:inherit;font-weight:700;border-radius:8px;font-size:13px;padding:9px 14px;}
+  .btn-main{background:var(--accent);color:white;}
+  .btn-active{background:var(--active);color:white;}
+  .btn-ghost{background:var(--pending-bg);color:var(--ink);}
+  .btn-row{display:flex;gap:8px;flex-wrap:wrap;}
+
+  .hint{font-size:12px;color:var(--pending);margin-top:8px;}
+  .hint.on{color:var(--active);font-weight:700;}
+
+  section{padding:14px 16px;}
+  .table-scroll{overflow-x:auto;border-radius:10px;border:1px solid var(--line);background:white;}
+  table{border-collapse:collapse;width:100%;font-size:14px;table-layout:fixed;}
+  th,td{border:1px solid var(--line);padding:8px 10px;text-align:left;vertical-align:top;word-wrap:break-word;overflow-wrap:break-word;}
+  th{background:#f1ede1;position:sticky;top:0;font-size:12px;text-transform:uppercase;letter-spacing:.04em;}
+  th:last-child, td:last-child{width:90px;}
+  .cell-edit{
+    width:100%;min-height:22px;outline:none;font-size:14px;color:var(--ink);padding:4px;
+    white-space:normal;word-break:break-word;
+  }
+  td.word-cell{cursor:pointer;}
+  td.word-cell.speak-mode:hover{background:var(--active-bg);}
+  td.chinese-cell{font-weight:600;}
+  .del-btn{
+    background:none;color:var(--pending);font-size:16px;padding:2px 6px;
+  }
+  .add-row-panel{margin-top:14px;background:white;border:1px solid var(--line);border-radius:14px;padding:14px;}
+  .add-row-panel .row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;}
+  .add-row-panel input{flex:1;min-width:140px;font-size:14px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;}
+  footer{text-align:center;font-size:11px;color:var(--pending);padding:18px 20px 4px;}
+
+  .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);display:none;align-items:center;justify-content:center;z-index:50;padding:16px;}
+  .modal-overlay.show{display:flex;}
+  .modal{background:white;border-radius:14px;padding:18px;max-width:420px;width:100%;max-height:85vh;overflow-y:auto;}
+  .modal h3{margin:0 0 10px;font-size:16px;}
+  .modal p{font-size:13px;color:var(--pending);margin:0 0 10px;}
+  .modal .row{display:flex;gap:8px;margin-bottom:8px;}
+  .modal input{width:100%;font-size:14px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;}
+  .modal .btn-row{margin-top:14px;justify-content:flex-end;}
+  .expiry-banner{
+    background:#fbe7df;color:#b85c3a;font-size:12px;font-weight:700;
+    padding:8px 10px;border-radius:8px;margin:8px 0;cursor:pointer;
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="eyebrow">Vocabulary Tracker</div>
+    <h1>English · Myanmar · Chinese</h1>
+    <div class="btn-row">
+      <button class="btn-ghost" id="speakModeBtn" onclick="toggleSpeakMode()">🔊 Pronounce Chinese</button>
+      <button class="btn-ghost" onclick="testSpeaker()">🔈 Test sound (阿妈)</button>
+      <button class="btn-ghost" id="syncStatusBtn" onclick="showSyncPanel()">☁️ Sync: Off</button>
+    </div>
+    <div id="syncExpiryBanner"></div>
+    <div class="hint" id="speakHint">Tap the button above, then tap any English or Myanmar word to hear its Chinese equivalent.</div>
+  </header>
+
+  <div class="modal-overlay" id="modalOverlay">
+    <div class="modal" id="modalBody"></div>
+  </div>
+
+  <section>
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr><th>English</th><th>Myanmar</th><th>Chinese</th><th></th></tr>
+        </thead>
+        <tbody id="tableBody"></tbody>
+      </table>
+    </div>
+
+    <div class="add-row-panel">
+      <div class="row">
+        <input type="text" id="newEnglish" placeholder="English word">
+        <input type="text" id="newMyanmar" placeholder="Myanmar word (auto-filled)">
+        <input type="text" id="newChinese" placeholder="Chinese word (auto-filled)">
+      </div>
+      <div class="row" id="translateStatus" style="font-size:12px;color:var(--pending);min-height:16px;"></div>
+      <button class="btn-main" id="addRowBtn">Add word</button>
+    </div>
+  </section>
+
+  <footer>Data is saved on this device's browser automatically.</footer>
+</div>
+
+<script>
+const STORAGE_KEY = 'vocabTrackerData_v1';
+let words = loadWords();
+let speakMode = false;
+
+function loadWords(){
+  try{
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if(raw) return JSON.parse(raw);
+  }catch(e){}
+  return [];
+}
+function saveWords(){
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(words));
+  if(syncToken && syncGistId){
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(pushToCloud, 600);
+  }
+}
+function uid(){ return 'w_' + Math.random().toString(36).slice(2,9); }
+
+// ---------- CLOUD SYNC (JSONBin.io, polling-based) ----------
+const SYNC_CONFIG_KEY = 'vocabTrackerSyncConfig_v1';
+// ── CLOUD SYNC (GitHub Gist) ──────────────────────────────────────────────
+let syncToken = '';
+let syncGistId = '';
+let pollHandle = null;
+let applyingRemote = false;
+let lastRemoteJson = null;
+let saveTimer = null;
+
+function loadSyncConfig(){ try{ const r=localStorage.getItem(SYNC_CONFIG_KEY); if(r) return JSON.parse(r); }catch(e){} return null; }
+function saveSyncConfig(c){ localStorage.setItem(SYNC_CONFIG_KEY, JSON.stringify(c)); }
+function initSyncFromSavedConfig(){ const c=loadSyncConfig(); if(c&&c.token&&c.gistId) connectSync(c.token,c.gistId,true); }
+
+async function connectSync(token, gistId, silent){
+  syncToken=token.trim(); gistId=(gistId||'').trim();
+  try{
+    if(!gistId){
+      const res=await fetch('https://api.github.com/gists',{
+        method:'POST',
+        headers:{'Authorization':'token '+syncToken,'Content-Type':'application/json','Accept':'application/vnd.github+json'},
+        body:JSON.stringify({description:'vocabTracker data',public:false,files:{'vocabTracker.json':{content:JSON.stringify({json:JSON.stringify(words),updatedAt:Date.now()})}}})
+      });
+      if(!res.ok){const e=await res.json();throw new Error(e.message||'Could not create gist (status '+res.status+')');}
+      const data=await res.json(); gistId=data.id;
+      alert('Sync database created!\n\nGist ID: '+gistId+'\n\nWrite this down — enter it on your other device to link them.');
+    }
+    syncGistId=gistId;
+    saveSyncConfig({token:syncToken,gistId:syncGistId});
+    updateSyncButton(true);
+    if(pollHandle) clearInterval(pollHandle);
+    await pollOnce();
+    pollHandle=setInterval(pollOnce,5000);
+    if(!silent) closeModal();
+  }catch(err){
+    console.warn(err); updateSyncButton(false);
+    if(!silent) alert('Could not connect.\n\n'+err.message+'\n\nCheck your Personal Access Token and Gist ID.');
+  }
+}
+
+async function pollOnce(){
+  if(!syncToken||!syncGistId) return;
+  try{
+    const res=await fetch('https://api.github.com/gists/'+syncGistId,{headers:{'Authorization':'token '+syncToken,'Accept':'application/vnd.github+json'}});
+    if(!res.ok) return;
+    const data=await res.json();
+    const file=data.files&&data.files['vocabTracker.json'];
+    if(!file) return;
+    const record=JSON.parse(file.content);
+    const remoteJson=record&&record.json;
+    if(remoteJson&&remoteJson!==lastRemoteJson){
+      lastRemoteJson=remoteJson;
+      applyingRemote=true;
+      words=JSON.parse(remoteJson);
+      localStorage.setItem(STORAGE_KEY,JSON.stringify(words));
+      render();
+      applyingRemote=false;
+    }
+  }catch(err){ console.warn('Poll failed',err); }
+}
+
+async function pushToCloud(){
+  if(!syncToken||!syncGistId||applyingRemote) return;
+  const json=JSON.stringify(words); lastRemoteJson=json;
+  try{
+    await fetch('https://api.github.com/gists/'+syncGistId,{
+      method:'PATCH',
+      headers:{'Authorization':'token '+syncToken,'Content-Type':'application/json','Accept':'application/vnd.github+json'},
+      body:JSON.stringify({files:{'vocabTracker.json':{content:JSON.stringify({json,updatedAt:Date.now()})}}})
+    });
+  }catch(err){ console.warn('Push failed',err); }
+}
+
+function updateSyncButton(on){ const b=document.getElementById('syncStatusBtn'); if(b) b.textContent=on?'☁️ Sync: On':'☁️ Sync: Off'; }
+
+function showSyncPanel(){
+  const cfg=loadSyncConfig()||{};
+  showModal(`<h3>☁️ Sync between devices</h3>
+    <p>You need a <b>GitHub Personal Access Token</b>. Create one at:<br>
+    <b>github.com → Settings → Developer settings → Personal access tokens → Tokens (classic) → Generate new token (classic)</b><br>
+    Tick only the <b>gist</b> scope, then copy the token.</p>
+    <div style="margin-bottom:8px;"><input type="text" id="cfgToken" placeholder="GitHub token (ghp_...)" value="${esc(cfg.token||'')}" style="width:100%;font-size:12px;"></div>
+    <div style="margin-bottom:8px;"><input type="text" id="cfgGistId" placeholder="Gist ID (leave blank on first device)" value="${esc(cfg.gistId||'')}" style="width:100%;"></div>
+    <p style="font-size:11px;">Leave Gist ID blank on first device — app creates one and shows you the ID. Enter same ID on other devices.</p>
+    <div class="btn-row"><button class="btn-ghost" onclick="closeModal()">Cancel</button><button class="btn-main" onclick="onConnectSync()">Connect</button></div>`);
+}
+
+function onConnectSync(){
+  const token=document.getElementById('cfgToken').value.trim();
+  const gistId=document.getElementById('cfgGistId').value.trim();
+  if(!token){ alert('Please enter your GitHub Personal Access Token.'); return; }
+  connectSync(token,gistId,false);
+}
+
+
+
+function closeModal(){
+  document.getElementById('modalOverlay').classList.remove('show');
+}
+
+// ---------- AUTO-TRANSLATE ----------
+async function translateWord(text, targetLangPair){
+  if(!text.trim()) return '';
+  try{
+    const res = await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=${targetLangPair}`);
+    const data = await res.json();
+    if(data && data.responseData && data.responseData.translatedText){
+      return data.responseData.translatedText;
+    }
+  }catch(err){
+    console.warn('Translation request failed', err);
+  }
+  return '';
+}
+
+async function autoTranslateNewRow(){
+  const enInput = document.getElementById('newEnglish');
+  const myInput = document.getElementById('newMyanmar');
+  const zhInput = document.getElementById('newChinese');
+  const statusEl = document.getElementById('translateStatus');
+  const text = enInput.value.trim();
+  if(!text) return;
+
+  statusEl.textContent = 'Translating…';
+  const [my, zh] = await Promise.all([
+    !myInput.value.trim() ? translateWord(text, 'en|my') : Promise.resolve(myInput.value),
+    !zhInput.value.trim() ? translateWord(text, 'en|zh-CN') : Promise.resolve(zhInput.value)
+  ]);
+  if(!myInput.value.trim() && my) myInput.value = my;
+  if(!zhInput.value.trim() && zh) zhInput.value = zh;
+  statusEl.textContent = (my || zh) ? 'Translated — check and edit if needed.' : 'Could not auto-translate this word. Please type it manually.';
+}
+
+async function translateExistingRow(id){
+  const w = words.find(x => x.id === id);
+  if(!w || !w.en.trim()) return;
+  const tasks = [];
+  if(!w.my.trim()) tasks.push(translateWord(w.en, 'en|my').then(t => { if(t) w.my = t; }));
+  if(!w.zh.trim()) tasks.push(translateWord(w.en, 'en|zh-CN').then(t => { if(t) w.zh = t; }));
+  if(tasks.length === 0) return;
+  await Promise.all(tasks);
+  saveWords();
+  render();
+}
+
+function addWord(en, my, zh){
+  if(!en.trim() && !my.trim() && !zh.trim()) return;
+  words.push({ id: uid(), en: en.trim(), my: my.trim(), zh: zh.trim() });
+  saveWords();
+  render();
+}
+
+function updateWord(id, field, value){
+  const w = words.find(x => x.id === id);
+  if(w) w[field] = value;
+  saveWords();
+}
+
+function deleteWord(id){
+  const w = words.find(x => x.id === id);
+  if(w && w.locked) return; // locked rows cannot be deleted
+  words = words.filter(w => w.id !== id);
+  saveWords();
+  render();
+}
+
+function escapeHtml(str){
+  return String(str).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+}
+
+function render(){
+  const body = document.getElementById('tableBody');
+  if(words.length === 0){
+    body.innerHTML = `<tr><td colspan="4" style="text-align:center;color:var(--pending);padding:24px;">No words yet — add your first one below.</td></tr>`;
+    return;
+  }
+  let html = '';
+  words.forEach((w, idx) => {
+    const cellClass = 'word-cell' + (speakMode ? ' speak-mode' : '');
+    const needsTranslate = !w.my.trim() || !w.zh.trim();
+    const editable = speakMode ? 'false' : 'true';
+    const isLocked = !!w.locked;
+    html += `<tr>
+      <td class="${cellClass}" onclick="onWordCellClick('${w.id}')"><div class="cell-edit" contenteditable="${editable}" onblur="updateWord('${w.id}','en',this.textContent)">${escapeHtml(w.en)}</div></td>
+      <td class="${cellClass}" onclick="onWordCellClick('${w.id}')"><div class="cell-edit" contenteditable="${editable}" onblur="updateWord('${w.id}','my',this.textContent)">${escapeHtml(w.my)}</div></td>
+      <td class="chinese-cell"><div class="cell-edit" contenteditable="true" onblur="updateWord('${w.id}','zh',this.textContent)">${escapeHtml(w.zh)}</div></td>
+      <td>
+        <div style="display:flex;flex-direction:column;gap:2px;align-items:flex-start;">
+          <div style="display:flex;gap:2px;">
+            <button class="del-btn" title="Move up" style="${idx === 0 ? 'opacity:.3;' : ''}" ${idx === 0 ? 'disabled' : ''} onclick="moveRow('${w.id}',-1)">▲</button>
+            <button class="del-btn" title="Move down" style="${idx === words.length-1 ? 'opacity:.3;' : ''}" ${idx === words.length-1 ? 'disabled' : ''} onclick="moveRow('${w.id}',1)">▼</button>
+          </div>
+          <div style="display:flex;gap:2px;">
+            ${needsTranslate ? `<button class="del-btn" title="Auto-translate blanks" onclick="translateExistingRow('${w.id}')">🌐</button>` : ''}
+            <button class="del-btn" title="${isLocked ? 'Locked — tap to unlock' : 'Tap to lock (prevents deletion)'}" onclick="toggleLock('${w.id}')">${isLocked ? '🔒' : '🔓'}</button>
+            ${isLocked ? '' : `<button class="del-btn" onclick="deleteWord('${w.id}')">✕</button>`}
+          </div>
+        </div>
+      </td>
+    </tr>`;
+  });
+  body.innerHTML = html;
+}
+
+function moveRow(id, direction){
+  const idx = words.findIndex(w => w.id === id);
+  if(idx === -1) return;
+  const newIdx = idx + direction;
+  if(newIdx < 0 || newIdx >= words.length) return;
+  const temp = words[idx];
+  words[idx] = words[newIdx];
+  words[newIdx] = temp;
+  saveWords();
+  render();
+}
+
+function toggleLock(id){
+  const w = words.find(x => x.id === id);
+  if(!w) return;
+  w.locked = !w.locked;
+  saveWords();
+  render();
+}
+
+
+function onWordCellClick(id){
+  if(!speakMode) return;
+  const w = words.find(x => x.id === id);
+  if(w && w.zh) speakChinese(w.zh);
+}
+
+let cachedVoices = [];
+function loadVoices(){
+  cachedVoices = window.speechSynthesis ? window.speechSynthesis.getVoices() : [];
+}
+if('speechSynthesis' in window){
+  loadVoices();
+  window.speechSynthesis.onvoiceschanged = loadVoices;
+}
+
+function speakChinese(text, isRetry){
+  if(!('speechSynthesis' in window)){
+    alert('Speech playback is not supported in this browser.');
+    return;
+  }
+  loadVoices();
+  const zhVoice = cachedVoices.find(v => v.lang && v.lang.toLowerCase().startsWith('zh'));
+
+  window.speechSynthesis.cancel();
+  const utter = new SpeechSynthesisUtterance(text);
+  utter.lang = 'zh-CN';
+  if(zhVoice) utter.voice = zhVoice;
+  let started = false;
+  utter.onstart = () => { started = true; };
+  utter.onerror = (e) => { console.warn('Speech error', e); };
+  window.speechSynthesis.speak(utter);
+
+  // If the engine is already stuck from a previous call, it won't fire
+  // onstart at all. Detect that and force a hard reset, then retry once.
+  if(!isRetry){
+    setTimeout(() => {
+      if(!started){
+        window.speechSynthesis.cancel();
+        setTimeout(() => speakChinese(text, true), 150);
+      }
+    }, 600);
+  }
+
+  if(!zhVoice){
+    setTimeout(() => {
+      if(!cachedVoices.some(v => v.lang && v.lang.toLowerCase().startsWith('zh'))){
+        alert('Your phone may not have a Chinese voice installed for text-to-speech, so no sound plays even though the button works. To fix: go to phone Settings → System → Languages & input → Text-to-speech output → (gear icon) → Install voice data → add Chinese, then restart Chrome.');
+      }
+    }, 400);
+  }
+}
+
+// Chrome on Android has a long-standing bug (chromium issue 679437) where the
+// speech engine silently freezes after the first utterance. The known
+// workaround is to repeatedly pause+resume it while it's speaking.
+if('speechSynthesis' in window){
+  setInterval(() => {
+    if(window.speechSynthesis.speaking){
+      window.speechSynthesis.pause();
+      window.speechSynthesis.resume();
+    }
+  }, 4000);
+}
+
+function testSpeaker(){
+  speakChinese('阿妈');
+}
+
+function toggleSpeakMode(){
+  speakMode = !speakMode;
+  const btn = document.getElementById('speakModeBtn');
+  const hint = document.getElementById('speakHint');
+  btn.className = speakMode ? 'btn-active' : 'btn-ghost';
+  btn.textContent = speakMode ? '🔊 Pronounce Chinese: ON' : '🔊 Pronounce Chinese';
+  hint.className = speakMode ? 'hint on' : 'hint';
+  hint.textContent = speakMode
+    ? 'Tap any English or Myanmar word now to hear its Chinese equivalent. Tap the button again to turn this off.'
+    : 'Tap the button above, then tap any English or Myanmar word to hear its Chinese equivalent.';
+  render();
+}
+
+document.getElementById('newEnglish').addEventListener('blur', autoTranslateNewRow);
+document.getElementById('addRowBtn').onclick = () => {
+  const en = document.getElementById('newEnglish');
+  const my = document.getElementById('newMyanmar');
+  const zh = document.getElementById('newChinese');
+  addWord(en.value, my.value, zh.value);
+  en.value = ''; my.value = ''; zh.value = '';
+  document.getElementById('translateStatus').textContent = '';
+  en.focus();
+};
+
+render();
+initSyncFromSavedConfig();
+</script>
+</body>
+</html>
